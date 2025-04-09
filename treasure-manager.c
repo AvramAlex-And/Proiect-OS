@@ -25,17 +25,25 @@ typedef struct {
 void add_treasure(const char* hunt_path) {
     char data_file[256], log_file[256], link_name[256];
 
+    // Build paths
     snprintf(data_file, sizeof(data_file), "%s/treasure.dat", hunt_path);
     snprintf(log_file, sizeof(log_file), "%s/logged_hunt", hunt_path);
     snprintf(link_name, sizeof(link_name), "./logged_hunt-%s",
              strrchr(hunt_path, '/') ? strrchr(hunt_path, '/') + 1 : hunt_path);
 
+    // ✅ Create the directory if it doesn't exist
     struct stat st;
-    if (stat(hunt_path, &st) == -1 || !S_ISDIR(st.st_mode)) {
-        fprintf(stderr, "Error: '%s' is not a valid directory.\n", hunt_path);
+    if (stat(hunt_path, &st) == -1) {
+        if (mkdir(hunt_path, 0755) != 0) {
+            perror("Could not create hunt directory");
+            return;
+        }
+    } else if (!S_ISDIR(st.st_mode)) {
+        fprintf(stderr, "Error: '%s' exists but is not a directory.\n", hunt_path);
         return;
     }
 
+    // Open treasure.dat in append mode
     int fd = open(data_file, O_WRONLY | O_CREAT | O_APPEND, 0644);
     if (fd < 0) {
         perror("Error opening treasure.dat");
@@ -59,13 +67,14 @@ void add_treasure(const char* hunt_path) {
     scanf("%f", &t.longitude);
 
     printf("Enter Clue: ");
-    getchar();
+    getchar(); // Consume newline
     fgets(t.clue, MAX_CLUE, stdin);
     t.clue[strcspn(t.clue, "\n")] = 0;
 
     printf("Enter Value: ");
     scanf("%d", &t.value);
 
+    // Write the treasure
     if (write(fd, &t, sizeof(Treasure)) != sizeof(Treasure)) {
         perror("Write failed");
         close(fd);
@@ -74,18 +83,21 @@ void add_treasure(const char* hunt_path) {
     close(fd);
     printf("Treasure added successfully.\n");
 
+    // Append to log file
     int log_fd = open(log_file, O_WRONLY | O_CREAT | O_APPEND, 0644);
     if (log_fd >= 0) {
         dprintf(log_fd, "ADD: %s (%s) by %s\n", t.id, t.name, t.username);
         close(log_fd);
     }
 
+    // Create symlink in root directory (if not already there)
     if (access(link_name, F_OK) == -1) {
         if (symlink(log_file, link_name) == -1) {
             perror("Symlink creation failed");
         }
     }
 }
+
 
 void list_treasures(const char* hunt_path) {
     char data_file[256];
